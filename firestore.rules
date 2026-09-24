@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /qr_codes/{id} {
+      // Izinkan baca publik untuk fitur redirect scan QR code
+      allow read: if true;
+      // Izinkan buat, ubah, dan hapus untuk manajemen dashboard admin
+      allow write: if true;
+    }
+  }
+}

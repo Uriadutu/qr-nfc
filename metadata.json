@@ -1,0 +1,8 @@
+{
+  "name": "Remix QR Generator \u0026 Dynamic Redirect Hub",
+  "description": "Aplikasi generator massal QR Code dinamis dengan admin dashboard dan pengalihan link Firebase Firestore otomatis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

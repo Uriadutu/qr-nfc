@@ -1,0 +1,53 @@
+{
+  "entities": {
+    "QRCode": {
+      "title": "QRCode",
+      "description": "Dynamic QR code and redirect item with scan tracking",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique QR ID or custom slug",
+          "maxLength": 128
+        },
+        "targetUrl": {
+          "type": "string",
+          "description": "Destination redirect URL",
+          "maxLength": 2048
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Creation timestamp in milliseconds"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Last update timestamp in milliseconds"
+        },
+        "label": {
+          "type": "string",
+          "description": "Optional user label or description",
+          "maxLength": 100
+        },
+        "scanCount": {
+          "type": "number",
+          "description": "Total number of successful scans"
+        },
+        "lastScannedAt": {
+          "type": "number",
+          "description": "Timestamp of the last scan"
+        },
+        "isCustomSlug": {
+          "type": "boolean",
+          "description": "Whether this ID was created as a custom slug"
+        }
+      },
+      "required": ["id", "targetUrl", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/qr_codes/{id}": {
+      "schema": "QRCode",
+      "description": "Collection of dynamic QR codes and their target URLs"
+    }
+  }
+}
