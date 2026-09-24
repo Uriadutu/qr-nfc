@@ -17,6 +17,12 @@ const RootQueryRedirect: React.FC = () => {
     return <Navigate to={`/${queryId.trim()}`} replace />;
   }
 
+  // Handle hash fallback if someone accesses e.g. /#/menu or /#menu
+  const hash = window.location.hash.replace(/^#\/?/, '').trim();
+  if (hash && hash !== 'admin' && hash !== '') {
+    return <Navigate to={`/${hash}`} replace />;
+  }
+
   return <DashboardPage />;
 };
 
