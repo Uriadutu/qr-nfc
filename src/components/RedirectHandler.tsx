@@ -333,23 +333,6 @@ export const RedirectHandler: React.FC<RedirectHandlerProps> = ({ id, onGoHome, 
                 )}
               </button>
             </form>
-
-            {/* Isolation Notice */}
-            <div className="mt-5 pt-3.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
-              <span className="flex items-center gap-1.5">
-                <Lock className="w-3 h-3 text-slate-400" />
-                <span>Terisolasi hanya untuk QR {id}</span>
-              </span>
-
-              {isAdmin && onGoHome && (
-                <button
-                  onClick={onGoHome}
-                  className="text-indigo-400 hover:underline cursor-pointer"
-                >
-                  Dashboard
-                </button>
-              )}
-            </div>
           </div>
         </div>
 
