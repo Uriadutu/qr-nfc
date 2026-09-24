@@ -42,8 +42,18 @@ export const RedirectHandler: React.FC<RedirectHandlerProps> = ({ id, onGoHome, 
     const checkRedirect = async () => {
       try {
         setLoading(true);
-        const docRef = doc(db, 'qr_codes', id);
-        const snapshot = await getDoc(docRef);
+        let docRef = doc(db, 'qr_codes', id);
+        let snapshot = await getDoc(docRef);
+
+        // Fallback jika ID yang diketik ada huruf besar tapi di database disimpan huruf kecil
+        if (!snapshot.exists() && id !== id.toLowerCase()) {
+          const lowerRef = doc(db, 'qr_codes', id.toLowerCase());
+          const lowerSnap = await getDoc(lowerRef);
+          if (lowerSnap.exists()) {
+            docRef = lowerRef;
+            snapshot = lowerSnap;
+          }
+        }
 
         if (!snapshot.exists()) {
           if (!isCancelled) {
