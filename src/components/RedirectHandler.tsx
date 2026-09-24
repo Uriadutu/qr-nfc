@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { doc, getDoc, updateDoc, increment } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, increment, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { QRCodeItem } from '../types';
 import {
@@ -42,12 +42,13 @@ export const RedirectHandler: React.FC<RedirectHandlerProps> = ({ id, onGoHome, 
     const checkRedirect = async () => {
       try {
         setLoading(true);
+        const cleanId = id.trim().toLowerCase();
         let docRef = doc(db, 'qr_codes', id);
         let snapshot = await getDoc(docRef);
 
         // Fallback jika ID yang diketik ada huruf besar tapi di database disimpan huruf kecil
-        if (!snapshot.exists() && id !== id.toLowerCase()) {
-          const lowerRef = doc(db, 'qr_codes', id.toLowerCase());
+        if (!snapshot.exists() && id !== cleanId) {
+          const lowerRef = doc(db, 'qr_codes', cleanId);
           const lowerSnap = await getDoc(lowerRef);
           if (lowerSnap.exists()) {
             docRef = lowerRef;
@@ -57,7 +58,7 @@ export const RedirectHandler: React.FC<RedirectHandlerProps> = ({ id, onGoHome, 
 
         if (!snapshot.exists()) {
           if (!isCancelled) {
-            setStatus('not_found');
+            setStatus('unlinked');
             setLoading(false);
           }
           return;
@@ -116,7 +117,7 @@ export const RedirectHandler: React.FC<RedirectHandlerProps> = ({ id, onGoHome, 
     };
   }, [id]);
 
-  // Handle user filling in the target link for THIS placeholder only
+  // Handle user filling in the target link for THIS placeholder / slug
   const handleUserSetLink = async (e: React.FormEvent) => {
     e.preventDefault();
     setInputError('');
@@ -134,23 +135,33 @@ export const RedirectHandler: React.FC<RedirectHandlerProps> = ({ id, onGoHome, 
     try {
       new URL(clean);
     } catch {
-      setInputError('Format link tidak valid. Masukkan URL seperti: https://instagram.com/akunanda');
+      setInputError('Format link tidak valid. Masukkan URL seperti: https://youtube.com atau https://wa.me/...');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const docRef = doc(db, 'qr_codes', id);
-      await updateDoc(docRef, {
-        targetUrl: clean,
-        updatedAt: Date.now(),
-      });
+      const cleanId = id.trim().toLowerCase();
+      const docRef = doc(db, 'qr_codes', cleanId);
+      await setDoc(
+        docRef,
+        {
+          id: cleanId,
+          targetUrl: clean,
+          updatedAt: Date.now(),
+          createdAt: qrItem?.createdAt || Date.now(),
+          scanCount: (qrItem?.scanCount || 0) + 1,
+          lastScannedAt: Date.now(),
+          isCustomSlug: true,
+        },
+        { merge: true }
+      );
       setSuccessSaved(true);
 
       // Langsung redirect tanpa konfirmasi
       setTimeout(() => {
         window.location.replace(clean);
-      }, 500);
+      }, 400);
     } catch (err) {
       console.error('Failed to set link:', err);
       setInputError('Gagal menyimpan tautan ke Firestore. Silakan coba kembali.');
