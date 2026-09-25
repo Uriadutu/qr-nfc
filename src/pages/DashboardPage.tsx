@@ -205,13 +205,14 @@ export const DashboardPage: React.FC = () => {
   // Download Single QR
   const handleDownloadSingle = async (item: QRCodeItem) => {
     const fullUrl = `${activeBaseUrl}/${item.id}`;
+    const filename = item.customSlug ? `${item.customSlug}.png` : `${item.id}.png`;
     try {
-      const dataUrl = await generatePrintableQrCard(item, fullUrl, 'QR Hub');
-      triggerDownload(dataUrl, `QR_${item.id}.png`);
+      const dataUrl = await generatePrintableQrCard(item, fullUrl);
+      triggerDownload(dataUrl, filename);
     } catch (err) {
       console.error('Failed to download QR card:', err);
       const simpleData = await generateQrDataUrl(fullUrl, { width: 800 });
-      triggerDownload(simpleData, `QR_${item.id}.png`);
+      triggerDownload(simpleData, filename);
     }
   };
 
