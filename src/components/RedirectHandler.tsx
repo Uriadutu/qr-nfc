@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { doc, getDoc, updateDoc, increment, setDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, increment, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { QRCodeItem } from '../types';
 import {
@@ -46,13 +46,24 @@ export const RedirectHandler: React.FC<RedirectHandlerProps> = ({ id, onGoHome, 
         let docRef = doc(db, 'qr_codes', id);
         let snapshot = await getDoc(docRef);
 
-        // Fallback jika ID yang diketik ada huruf besar tapi di database disimpan huruf kecil
+        // Fallback 1: periksa ID huruf kecil
         if (!snapshot.exists() && id !== cleanId) {
           const lowerRef = doc(db, 'qr_codes', cleanId);
           const lowerSnap = await getDoc(lowerRef);
           if (lowerSnap.exists()) {
             docRef = lowerRef;
             snapshot = lowerSnap;
+          }
+        }
+
+        // Fallback 2: periksa apakah ini customSlug (misal user mengakses /menu)
+        if (!snapshot.exists()) {
+          const slugQuery = query(collection(db, 'qr_codes'), where('customSlug', '==', cleanId));
+          const slugSnap = await getDocs(slugQuery);
+          if (!slugSnap.empty) {
+            const matchedDoc = slugSnap.docs[0];
+            docRef = matchedDoc.ref;
+            snapshot = matchedDoc;
           }
         }
 

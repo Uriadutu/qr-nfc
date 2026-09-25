@@ -3,6 +3,28 @@ import JSZip from 'jszip';
 import { QRCodeItem } from '../types';
 
 /**
+ * Generate a 6-character random alphanumeric string [0-9, a-z, A-Z]
+ * Example: "u8iA0Y", "k9L2xP", "7nB3qZ"
+ */
+export function generateRandom6Char(): string {
+  const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let result = '';
+  const cryptoObj = typeof window !== 'undefined' ? window.crypto : null;
+  if (cryptoObj && cryptoObj.getRandomValues) {
+    const values = new Uint8Array(6);
+    cryptoObj.getRandomValues(values);
+    for (let i = 0; i < 6; i++) {
+      result += chars[values[i] % chars.length];
+    }
+  } else {
+    for (let i = 0; i < 6; i++) {
+      result += chars[Math.floor(Math.random() * chars.length)];
+    }
+  }
+  return result;
+}
+
+/**
  * Generate a PNG data URL for a given target QR URL
  */
 export async function generateQrDataUrl(
@@ -80,13 +102,15 @@ export async function generatePrintableQrCard(
       ctx.drawImage(img, qrX, qrY, qrSize, qrSize);
 
       // ID Tag Badge
+      const displayLabel = qrItem.customSlug ? `/${qrItem.customSlug}` : `ID: ${qrItem.id}`;
+      const badgeWidth = Math.max(320, displayLabel.length * 20 + 60);
       ctx.fillStyle = '#e0e7ff';
-      ctx.roundRect((width - 320) / 2, 970, 320, 60, 30);
+      ctx.roundRect((width - badgeWidth) / 2, 970, badgeWidth, 60, 30);
       ctx.fill();
 
       ctx.fillStyle = '#3730a3';
-      ctx.font = 'bold 32px "JetBrains Mono", monospace';
-      ctx.fillText(`ID: ${qrItem.id}`, width / 2, 1012);
+      ctx.font = 'bold 30px "JetBrains Mono", monospace';
+      ctx.fillText(displayLabel, width / 2, 1012);
 
       // Scan instruction footer
       ctx.fillStyle = '#64748b';

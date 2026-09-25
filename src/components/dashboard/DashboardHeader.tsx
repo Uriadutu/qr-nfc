@@ -1,14 +1,16 @@
 import React from 'react';
-import { QrCode, Layers, Sparkles } from 'lucide-react';
+import { QrCode, Layers, Sparkles, Lock } from 'lucide-react';
 
 interface DashboardHeaderProps {
   onOpenCustomSlug: () => void;
   onOpenBulkGenerate: () => void;
+  onLock?: () => void;
 }
 
 export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   onOpenCustomSlug,
   onOpenBulkGenerate,
+  onLock,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800">
@@ -49,6 +51,17 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
             <Layers className="w-4 h-4" />
             <span>Bulk</span>
           </button>
+
+          {onLock && (
+            <button
+              onClick={onLock}
+              className="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 active:scale-95 text-slate-400 hover:text-rose-400 border border-slate-700/50 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+              title="Kunci Dashboard (Keluar)"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Kunci</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

@@ -108,30 +108,59 @@ export const deleteBatchQrCodes = async (ids: string[]): Promise<void> => {
   }
 };
 
+import { generateRandom6Char } from '../utils/qrHelper';
+
 /**
- * Create a custom QR code / slug
+ * Create a custom QR code / slug with 6-character random alphanumeric link key
+ */
+export const createCustomSlugItem = async (
+  customSlug: string,
+  targetUrl: string = '',
+  explicitRandomId?: string
+): Promise<{ id: string; customSlug: string }> => {
+  const cleanSlug = customSlug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  if (!cleanSlug) {
+    throw new Error('Custom slug tidak boleh kosong.');
+  }
+
+  let finalRandomId = explicitRandomId ? explicitRandomId.trim() : generateRandom6Char();
+  
+  // Ensure the 6-character ID is unique in Firestore
+  let attempts = 0;
+  while (attempts < 10) {
+    const docRef = doc(db, QR_COLLECTION, finalRandomId);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) {
+      break;
+    }
+    finalRandomId = generateRandom6Char();
+    attempts++;
+  }
+
+  const docRef = doc(db, QR_COLLECTION, finalRandomId);
+  const newItem: QRCodeItem = {
+    id: finalRandomId,
+    customSlug: cleanSlug,
+    label: cleanSlug,
+    targetUrl: targetUrl.trim(),
+    createdAt: Date.now(),
+    scanCount: 0,
+    isCustomSlug: true,
+  };
+
+  await setDoc(docRef, newItem);
+  return { id: finalRandomId, customSlug: cleanSlug };
+};
+
+/**
+ * Legacy compatibility helper
  */
 export const createCustomSlug = async (
   id: string,
   targetUrl: string = '',
   label?: string
 ): Promise<void> => {
-  const docRef = doc(db, QR_COLLECTION, id);
-  const snap = await getDoc(docRef);
-  if (snap.exists()) {
-    throw new Error(`ID atau Slug "${id}" sudah digunakan! Silakan gunakan slug lain.`);
-  }
-
-  const newItem: QRCodeItem = {
-    id,
-    targetUrl: targetUrl.trim(),
-    createdAt: Date.now(),
-    scanCount: 0,
-    isCustomSlug: true,
-    ...(label ? { label: label.trim() } : {}),
-  };
-
-  await setDoc(docRef, newItem);
+  await createCustomSlugItem(id, targetUrl);
 };
 
 export interface BulkGenerateParams {

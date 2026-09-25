@@ -24,10 +24,13 @@ import { BulkGenerateModal } from '../components/BulkGenerateModal';
 import { CustomSlugModal } from '../components/CustomSlugModal';
 import { EditLinkModal } from '../components/EditLinkModal';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
+import { PinLockScreen } from '../components/PinLockScreen';
+import { isDashboardAuthenticated, clearDashboardAuthentication } from '../services/pinService';
 import confetti from 'canvas-confetti';
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => isDashboardAuthenticated());
 
   // Active base domain origin
   const activeBaseUrl = useMemo(() => {
@@ -71,9 +74,12 @@ export const DashboardPage: React.FC = () => {
   // Filtered items computation
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
+      const query = searchQuery.toLowerCase();
       const matchSearch =
-        item.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.targetUrl && item.targetUrl.toLowerCase().includes(searchQuery.toLowerCase()));
+        item.id.toLowerCase().includes(query) ||
+        (item.customSlug && item.customSlug.toLowerCase().includes(query)) ||
+        (item.label && item.label.toLowerCase().includes(query)) ||
+        (item.targetUrl && item.targetUrl.toLowerCase().includes(query));
 
       if (!matchSearch) return false;
 
@@ -245,12 +251,24 @@ export const DashboardPage: React.FC = () => {
     navigate(`/${id}`);
   };
 
+  // Lock handler
+  const handleLock = () => {
+    clearDashboardAuthentication();
+    setIsAuthenticated(false);
+  };
+
+  // If not authenticated via PIN, show PIN Lock Screen
+  if (!isAuthenticated) {
+    return <PinLockScreen onSuccess={() => setIsAuthenticated(true)} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white pb-16 sm:pb-8">
       {/* Header */}
       <DashboardHeader
         onOpenCustomSlug={() => setIsCustomSlugOpen(true)}
         onOpenBulkGenerate={() => setIsBulkOpen(true)}
+        onLock={handleLock}
       />
 
       {/* Main Content */}

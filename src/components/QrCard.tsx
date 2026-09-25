@@ -72,14 +72,16 @@ export const QrCard: React.FC<QrCardProps> = ({
             onChange={() => onToggleSelect(item.id)}
             className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 shrink-0"
           />
-          <span className="font-mono font-bold text-sm sm:text-base text-white tracking-wide truncate">
-            {item.id}
-          </span>
-          {item.isCustomSlug && (
-            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 shrink-0">
-              Custom
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="font-mono font-bold text-sm sm:text-base text-white tracking-wide truncate">
+              {item.customSlug ? `/${item.customSlug}` : item.id}
             </span>
-          )}
+            {item.isCustomSlug && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 shrink-0">
+                Custom
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
