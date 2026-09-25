@@ -30,9 +30,11 @@ export const subscribeQrCodes = (
       snapshot.forEach((docSnap) => {
         list.push(docSnap.data() as QRCodeItem);
       });
-      list.sort((a, b) =>
-        a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' })
-      );
+      list.sort((a, b) => {
+        const nameA = a.customSlug || a.label || a.id;
+        const nameB = b.customSlug || b.label || b.id;
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+      });
       onData(list);
     },
     (err) => {
@@ -172,24 +174,36 @@ export interface BulkGenerateParams {
 }
 
 /**
- * Bulk generate sequential QR codes
+ * Bulk generate sequential QR codes with 6-character random alphanumeric links
  */
 export const bulkGenerateQrCodes = async (params: BulkGenerateParams): Promise<number> => {
   const batchSize = 400;
   let batch = writeBatch(db);
   let countInBatch = 0;
   let totalCreated = 0;
+  const usedIdsInBatch = new Set<string>();
 
   for (let i = 0; i < params.count; i++) {
     const num = params.startNum + i;
-    const id = `${params.prefix}${String(num).padStart(params.padLength, '0')}`;
-    const docRef = doc(db, QR_COLLECTION, id);
+    const slug = `${params.prefix}${String(num).padStart(params.padLength, '0')}`;
+    
+    // Generate unique 6-character random alphanumeric string for the link key
+    let randomId = generateRandom6Char();
+    while (usedIdsInBatch.has(randomId)) {
+      randomId = generateRandom6Char();
+    }
+    usedIdsInBatch.add(randomId);
+
+    const docRef = doc(db, QR_COLLECTION, randomId);
 
     const newItem: QRCodeItem = {
-      id,
+      id: randomId,
+      customSlug: slug,
+      label: slug,
       targetUrl: params.initialUrl || '',
       createdAt: Date.now(),
       scanCount: 0,
+      isCustomSlug: true,
     };
 
     batch.set(docRef, newItem, { merge: true });

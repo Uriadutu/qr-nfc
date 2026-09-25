@@ -167,7 +167,8 @@ export async function downloadBulkAsZip(
 
     // Extract base64 part
     const base64Data = dataUrl.split(',')[1];
-    folder?.file(`${item.id}.png`, base64Data, { base64: true });
+    const fileName = item.customSlug ? `${item.customSlug}.png` : `${item.id}.png`;
+    folder?.file(fileName, base64Data, { base64: true });
 
     if (onProgress) {
       onProgress(i + 1, items.length);
@@ -175,13 +176,13 @@ export async function downloadBulkAsZip(
   }
 
   // Add a CSV summary in the zip
-  const csvHeader = 'ID,Full_Redirect_URL,Target_URL,Status\n';
+  const csvHeader = 'Label_Slug,Random_Key_ID,Full_Redirect_URL,Target_URL,Status\n';
   const csvRows = items
     .map(
       (item) =>
-        `"${item.id}","${baseUrl.replace(/\/$/, '')}/${item.id}","${item.targetUrl || ''}","${
-          item.targetUrl ? 'AKTIF' : 'KOSONG'
-        }"`
+        `"${item.customSlug || item.id}","${item.id}","${baseUrl.replace(/\/$/, '')}/${item.id}","${
+          item.targetUrl || ''
+        }","${item.targetUrl ? 'AKTIF' : 'KOSONG'}"`
     )
     .join('\n');
   folder?.file('daftar_qr.csv', csvHeader + csvRows);

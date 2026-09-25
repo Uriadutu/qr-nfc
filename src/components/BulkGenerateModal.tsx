@@ -147,15 +147,30 @@ export const BulkGenerateModal: React.FC<BulkGenerateModalProps> = ({
           </div>
 
           {/* Live Preview of Range */}
-          <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 text-xs">
-            <div className="flex items-center gap-1.5 text-indigo-400 font-semibold mb-1">
-              <HelpCircle className="w-3.5 h-3.5" />
-              <span>Pratinjau Hasil Generate:</span>
+          <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-indigo-400 font-semibold">
+                <HelpCircle className="w-3.5 h-3.5" />
+                <span>Pratinjau Hasil Generate Massal:</span>
+              </div>
+              <span className="text-indigo-400 font-bold bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                Total: {count} QR
+              </span>
             </div>
-            <div className="text-slate-300 font-mono flex items-center justify-between">
-              <span>Rentang: <strong className="text-white">{exampleStart}</strong> s/d <strong className="text-white">{exampleEnd}</strong></span>
-              <span className="text-indigo-400 font-semibold">Total: {count} QR</span>
+
+            <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800/80 space-y-1 text-slate-300 font-mono text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-sans">Label / Tampilan Card:</span>
+                <span className="font-bold text-white">/{exampleStart} s/d /{exampleEnd}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-sans">Link Akses &amp; Scan:</span>
+                <span className="text-indigo-300 font-bold">/{'{random6}'} (6 Karakter Acak)</span>
+              </div>
             </div>
+            <p className="text-[11px] text-slate-400 font-sans">
+              Setiap barcode memiliki link acak unik 6 karakter (0-9, a-z, A-Z) yang aman dan otomatis tersambung ke label berurutannya.
+            </p>
           </div>
 
           {/* Action buttons */}
