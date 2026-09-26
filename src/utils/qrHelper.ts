@@ -82,14 +82,14 @@ export const NFC_QR_CONFIG = {
    *
    * null = otomatis ke kanan
    */
-  x: null,
+  x: null as number | null,
 
   /**
    * Posisi vertikal.
    *
    * null = otomatis ke bawah
    */
-  y: null,
+  y: null as number | null,
 
   /**
    * Ukuran QR Code dalam pixel.
@@ -133,6 +133,53 @@ export const NFC_QR_CONFIG = {
    * '#00000000' = transparan
    */
   lightColor: '#00000000',
+
+  /**
+   * ==========================================
+   * Konfigurasi Teks Custom Slug / ID
+   * ==========================================
+   */
+  showId: true,
+
+  /**
+   * Posisi horizontal teks (null = otomatis di tengah QR code).
+   */
+  idX: null as number | null,
+
+  /**
+   * Posisi vertikal teks (null = otomatis di bawah QR code).
+   */
+  idY: null as number | null,
+
+  /**
+   * Jarak teks dari sisi bawah QR Code.
+   */
+  idPaddingTop: 40,
+
+  /**
+   * Ukuran font teks dalam pixel.
+   */
+  idFontSize: 130,
+
+  /**
+   * Font family teks.
+   */
+  idFontFamily: '"Segoe UI", Roboto, "JetBrains Mono", -apple-system, sans-serif',
+
+  /**
+   * Font weight teks.
+   */
+  idFontWeight: 'normal',
+
+  /**
+   * Warna teks.
+   */
+  idColor: '#000000',
+
+  /**
+   * Prefix teks (opsional, default kosong).
+   */
+  idPrefix: '',
 };
 
 /**
@@ -147,9 +194,8 @@ export const NFC_QR_CONFIG = {
  * 3. Buat canvas dengan ukuran template
  * 4. Gambar template
  * 5. Letakkan QR di kanan bawah
- * 6. Export menjadi PNG
- *
- * Tidak ada teks tambahan.
+ * 6. Gambar customSlug di bawah QR Code
+ * 7. Export menjadi PNG
  */
 export async function generatePrintableQrCard(
   qrItem: QRCodeItem,
@@ -284,7 +330,35 @@ export async function generatePrintableQrCard(
 
         /**
          * ================================================================
-         * 5. Convert canvas menjadi PNG Data URL
+         * 5. Gambar Teks customSlug di bawah QR Code
+         * ================================================================
+         */
+        const textValue = qrItem.customSlug || qrItem.id;
+        if (NFC_QR_CONFIG.showId && textValue) {
+          const displayText = `${NFC_QR_CONFIG.idPrefix || ''}${textValue}`;
+
+          const textX =
+            NFC_QR_CONFIG.idX !== null
+              ? NFC_QR_CONFIG.idX
+              : qrX + qrSize / 2;
+
+          const textY =
+            NFC_QR_CONFIG.idY !== null
+              ? NFC_QR_CONFIG.idY
+              : qrY + qrSize + NFC_QR_CONFIG.idPaddingTop;
+
+          ctx.save();
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillStyle = NFC_QR_CONFIG.idColor;
+          ctx.font = `${NFC_QR_CONFIG.idFontWeight} ${NFC_QR_CONFIG.idFontSize}px ${NFC_QR_CONFIG.idFontFamily}`;
+          ctx.fillText(displayText, textX, textY);
+          ctx.restore();
+        }
+
+        /**
+         * ================================================================
+         * 6. Convert canvas menjadi PNG Data URL
          * ================================================================
          */
         resolve(
