@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { DashboardPage } from './pages/DashboardPage';
 import { RedirectPage } from './pages/RedirectPage';
+import { LinkTreeEditorPage } from './pages/LinkTreeEditorPage';
 
 /**
  * Root query parameter fallback handler:
@@ -35,6 +36,9 @@ export default function App() {
 
         {/* Explicit Admin Route */}
         <Route path="/admin" element={<DashboardPage />} />
+
+        {/* Link Tree Editor Route */}
+        <Route path="/app2/:id" element={<LinkTreeEditorPage />} />
 
         {/* Dynamic Redirect Handler Route (e.g. /001, /qr001, /menu) */}
         <Route path="/:id" element={<RedirectPage />} />

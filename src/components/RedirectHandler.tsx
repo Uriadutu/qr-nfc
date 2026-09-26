@@ -1,17 +1,24 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { doc, getDoc, updateDoc, increment, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, increment, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { QRCodeItem } from '../types';
 import {
-  AlertTriangle,
   QrCode,
   ShieldAlert,
   Loader2,
-  Copy,
-  Check,
-  Send,
-  Lock,
+  ExternalLink,
+  Settings,
+  Link2,
+  Pencil,
 } from 'lucide-react';
+import { getPlatformInfo } from './LinkIcon';
+import { NotFound } from './NotFound';
+
+interface LinkItem {
+  id: string;
+  title: string;
+  url: string;
+}
 
 interface RedirectHandlerProps {
   id: string;
@@ -21,20 +28,13 @@ interface RedirectHandlerProps {
 
 export const RedirectHandler: React.FC<RedirectHandlerProps> = ({ id, onGoHome, isAdmin = false }) => {
   const [loading, setLoading] = useState(true);
-  const [qrItem, setQrItem] = useState<QRCodeItem | null>(null);
-  const [status, setStatus] = useState<'loading' | 'redirecting' | 'unlinked' | 'not_found' | 'error'>('loading');
-
-  // Input state for user activating their own QR placeholder
-  const [inputUrl, setInputUrl] = useState('');
-  const [inputError, setInputError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [successSaved, setSuccessSaved] = useState(false);
+  const [status, setStatus] = useState<'loading' | 'redirecting' | 'linktree' | 'empty' | 'not_found' | 'error'>('loading');
+  const [links, setLinks] = useState<LinkItem[]>([]);
+  const [profileTitle, setProfileTitle] = useState('');
+  const [profileBio, setProfileBio] = useState('');
 
   // Guard flag to prevent React 19 StrictMode double execution incrementing counter twice
   const hasIncrementedRef = useRef(false);
-
-  const currentQrShareUrl = window.location.href;
 
   useEffect(() => {
     let isCancelled = false;
@@ -80,13 +80,63 @@ export const RedirectHandler: React.FC<RedirectHandlerProps> = ({ id, onGoHome, 
         }
 
         const data = snapshot.data() as QRCodeItem;
-        if (!isCancelled) {
-          setQrItem(data);
+
+        // Fetch linktree data
+        const linktreeRef = doc(db, 'linktree', rawId);
+        let linktreeSnap = await getDoc(linktreeRef);
+
+        // Fallback lowercase
+        if (!linktreeSnap.exists() && rawId !== lowerId) {
+          linktreeSnap = await getDoc(doc(db, 'linktree', lowerId));
         }
 
-        // Jika link sudah ada, lakukan direct redirect & catat 1 kali scan
+        const linktreeLinks: LinkItem[] = [];
+        let fetchedTitle = '';
+        let fetchedBio = '';
+
+        if (linktreeSnap.exists()) {
+          const ltData = linktreeSnap.data();
+          if (ltData.links && Array.isArray(ltData.links)) {
+            linktreeLinks.push(...ltData.links.filter((l: LinkItem) => l.title || l.url));
+          }
+          if (ltData.profileTitle || ltData.title || ltData.name) {
+            fetchedTitle = (ltData.profileTitle || ltData.title || ltData.name || '').trim();
+          }
+          if (ltData.bio || ltData.description) {
+            fetchedBio = (ltData.bio || ltData.description || '').trim();
+          }
+        }
+
+        // If linktree has links → show link tree
+        if (linktreeLinks.length > 0) {
+          if (!isCancelled) {
+            setLinks(linktreeLinks);
+            setProfileTitle(fetchedTitle);
+            setProfileBio(fetchedBio);
+            if (fetchedTitle) {
+              document.title = `${fetchedTitle} | Link Tree`;
+            }
+            setStatus('linktree');
+            setLoading(false);
+
+            // Record scan
+            if (!hasIncrementedRef.current) {
+              hasIncrementedRef.current = true;
+              try {
+                await updateDoc(docRef, {
+                  scanCount: increment(1),
+                  lastScannedAt: Date.now(),
+                });
+              } catch (err) {
+                console.error('Failed to update scan stats:', err);
+              }
+            }
+          }
+          return;
+        }
+
+        // If targetUrl exists → redirect
         if (data.targetUrl && data.targetUrl.trim() !== '') {
-          // Prevent double increment
           if (!hasIncrementedRef.current) {
             hasIncrementedRef.current = true;
             try {
@@ -103,16 +153,14 @@ export const RedirectHandler: React.FC<RedirectHandlerProps> = ({ id, onGoHome, 
           if (!target.startsWith('http://') && !target.startsWith('https://')) {
             target = `https://${target}`;
           }
-
-          // Direct immediate redirect
           window.location.replace(target);
           return;
-        } else {
-          // QR Code ada di database, tetapi link tujuan masih kosong (Placeholder)
-          if (!isCancelled) {
-            setStatus('unlinked');
-            setLoading(false);
-          }
+        }
+
+        // No links and no targetUrl → empty state
+        if (!isCancelled) {
+          setStatus('empty');
+          setLoading(false);
         }
       } catch (err) {
         console.error('Error fetching redirect:', err);
@@ -132,264 +180,173 @@ export const RedirectHandler: React.FC<RedirectHandlerProps> = ({ id, onGoHome, 
     };
   }, [id]);
 
-  // Handle user filling in the target link for THIS placeholder / slug
-  const handleUserSetLink = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setInputError('');
-
-    let clean = inputUrl.trim();
-    if (!clean) {
-      setInputError('Silakan masukkan link URL tujuan.');
-      return;
-    }
-
-    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
-      clean = `https://${clean}`;
-    }
-
-    try {
-      new URL(clean);
-    } catch {
-      setInputError('Format link tidak valid. Masukkan URL seperti: https://youtube.com atau https://wa.me/...');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const cleanId = id.trim().toLowerCase();
-      const docRef = doc(db, 'qr_codes', cleanId);
-      await setDoc(
-        docRef,
-        {
-          id: cleanId,
-          targetUrl: clean,
-          updatedAt: Date.now(),
-          createdAt: qrItem?.createdAt || Date.now(),
-          scanCount: (qrItem?.scanCount || 0) + 1,
-          lastScannedAt: Date.now(),
-          isCustomSlug: true,
-        },
-        { merge: true }
-      );
-      setSuccessSaved(true);
-
-      // Langsung redirect tanpa konfirmasi
-      setTimeout(() => {
-        window.location.replace(clean);
-      }, 400);
-    } catch (err) {
-      console.error('Failed to set link:', err);
-      setInputError('Gagal menyimpan tautan ke Firestore. Silakan coba kembali.');
-      setIsSubmitting(false);
-    }
+  const navigateToEditor = () => {
+    window.location.href = `/app2/${id}`;
   };
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(currentQrShareUrl);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2500);
-  };
-
+  // ─── Loading State ──────────────────────────────────────────────────────────
   if (loading || status === 'loading') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-slate-950 text-slate-100">
-        <div className="w-14 h-14 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center mb-4 text-indigo-400">
-          <Loader2 className="w-7 h-7 animate-spin" />
+        <div className="w-12 h-12 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center mb-4 text-indigo-400">
+          <Loader2 className="w-6 h-6 animate-spin" />
         </div>
-        <h2 className="text-lg font-bold tracking-tight text-white mb-1">Memeriksa Link QR...</h2>
-        <p className="text-xs text-slate-400 font-mono">Kode ID: {id}</p>
+        <p className="text-sm font-medium text-slate-300">Memuat...</p>
+        <p className="text-xs text-slate-500 font-mono mt-1">{id}</p>
       </div>
     );
   }
 
-  // Jika sedang diproses redirect instan
+  // ─── Redirecting State ──────────────────────────────────────────────────────
   if (status === 'redirecting') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-slate-950 text-slate-100">
-        <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-4 text-emerald-400">
-          <Loader2 className="w-7 h-7 animate-spin" />
+        <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-4 text-emerald-400">
+          <Loader2 className="w-6 h-6 animate-spin" />
         </div>
-        <h2 className="text-lg font-bold tracking-tight text-white mb-1">Mengalihkan Langsung...</h2>
-        <p className="text-xs text-slate-400 font-mono">ID: {id}</p>
+        <p className="text-sm font-medium text-slate-300">Mengalihkan...</p>
       </div>
     );
   }
 
-  // Placeholder Khusus untuk QR ini (Mobile optimized)
-  if (status === 'unlinked') {
+  // ─── Link Tree Display (links active) ──────────────────────────────────────
+  if (status === 'linktree') {
     return (
-      <div className="min-h-screen flex flex-col justify-between p-4 sm:p-6 bg-slate-950 text-slate-100 relative selection:bg-indigo-500 selection:text-white">
-        {/* Background glow */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(99,102,241,0.18),rgba(255,255,255,0))] pointer-events-none" />
+      <div className="min-h-screen bg-slate-950 text-slate-100 relative overflow-hidden">
+        {/* Background gradient */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(139,92,246,0.12),transparent)] pointer-events-none" />
+        <div className="absolute bottom-0 inset-x-0 h-40 bg-gradient-to-t from-slate-950 to-transparent pointer-events-none" />
 
-        <div className="w-full max-w-md mx-auto my-auto relative">
-          <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl overflow-hidden">
-            {/* Top Amber Accent Line */}
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-indigo-500 to-amber-500" />
+        {/* Settings button — top right */}
+        <button
+          onClick={navigateToEditor}
+          className="fixed top-4 right-4 z-50 w-10 h-10 rounded-xl bg-slate-900/80 backdrop-blur-lg border border-slate-700/60 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 hover:border-slate-600 transition-all cursor-pointer active:scale-90"
+          title="Edit Link Tree"
+        >
+          <Settings className="w-4.5 h-4.5" />
+        </button>
 
-            {/* Header & QR Badge */}
-            <div className="flex items-center justify-between gap-2 mb-5">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
-                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">
-                  Placeholder QR
-                </span>
-              </div>
-              <div className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-800 text-indigo-300 border border-slate-700">
-                ID: {id}
-              </div>
+        <div className="relative z-10 w-full max-w-md mx-auto px-5 pt-14 pb-10">
+          {/* Profile / ID section */}
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 mx-auto mb-4 flex items-center justify-center shadow-xl shadow-violet-500/25">
+              <Link2 className="w-7 h-7 text-white" />
             </div>
-
-            <div className="text-center mb-5">
-              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 mx-auto mb-3 flex items-center justify-center shadow-lg shadow-amber-500/5">
-                <AlertTriangle className="w-7 h-7 text-amber-400" />
-              </div>
-              <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">
-                Link Belum Diaktifkan
-              </h1>
-              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                QR Code ID <span className="font-mono text-indigo-300 font-bold">{id}</span> belum memiliki tujuan. Masukkan link di bawah untuk mengaktifkan kartu QR ini.
+            <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+              {profileTitle || id}
+            </h1>
+            {profileBio ? (
+              <p className="text-xs text-slate-400 mt-1.5 max-w-xs mx-auto leading-relaxed">
+                {profileBio}
               </p>
-            </div>
-
-            {/* Tombol Copy Link QR ini */}
-            <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800 mb-4 flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider block">
-                  Link QR Ini:
-                </span>
-                <span className="text-xs font-mono text-slate-300 truncate block">
-                  {currentQrShareUrl}
-                </span>
-              </div>
-              <button
-                onClick={handleCopyLink}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
-                title="Salin Link QR ini"
-              >
-                {copiedLink ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="text-emerald-400">Tersalin</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5 text-slate-300" />
-                    <span>Salin</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Form aktivasi */}
-            <form onSubmit={handleUserSetLink} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Masukkan Link Tujuan Anda:
-                </label>
-                <input
-                  type="text"
-                  value={inputUrl}
-                  onChange={(e) => {
-                    setInputUrl(e.target.value);
-                    if (inputError) setInputError('');
-                  }}
-                  placeholder="https://instagram.com/toko atau https://wa.me/..."
-                  className="w-full px-3.5 py-3 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                  disabled={isSubmitting || successSaved}
-                  autoFocus
-                />
-                {inputError && (
-                  <p className="mt-1.5 text-xs text-red-400">{inputError}</p>
-                )}
-              </div>
-
-              {/* Quick Preset Buttons */}
-              <div className="flex flex-wrap gap-1.5 pt-0.5">
-                <span className="text-[10px] text-slate-500 mr-1 self-center">Template:</span>
-                <button
-                  type="button"
-                  onClick={() => setInputUrl('https://wa.me/')}
-                  className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white transition-colors"
-                >
-                  WhatsApp
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInputUrl('https://instagram.com/')}
-                  className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white transition-colors"
-                >
-                  Instagram
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInputUrl('https://maps.google.com/')}
-                  className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white transition-colors"
-                >
-                  Maps
-                </button>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isSubmitting || successSaved}
-                className="w-full mt-2 flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/30 disabled:opacity-50 cursor-pointer"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Menyimpan & Mengalihkan...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    <span>Aktifkan & Buka Link</span>
-                  </>
-                )}
-              </button>
-            </form>
+            ) : (
+              <p className="text-xs text-slate-500 mt-1 font-mono">
+                {id}
+              </p>
+            )}
           </div>
-        </div>
 
-        <div className="mt-4 pb-2 text-center text-[11px] text-slate-600 flex items-center justify-center gap-1.5">
-          <QrCode className="w-3.5 h-3.5 text-slate-600" />
-          <span>Dynamic QR & NFC Redirect System</span>
+          {/* Links */}
+          <div className="space-y-3">
+            {links.map((link) => {
+              let href = link.url?.trim() || '#';
+              if (href !== '#' && !href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('mailto:')) {
+                href = `https://${href}`;
+              }
+
+              const platform = getPlatformInfo(link.url, link.title);
+              const PlatformIcon = platform.icon;
+
+              return (
+                <a
+                  key={link.id}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`group flex items-center gap-3.5 w-full px-4 py-3.5 rounded-2xl bg-slate-900/70 backdrop-blur border border-slate-800/80 ${platform.hoverBorder} hover:bg-slate-800/60 transition-all duration-200 active:scale-[0.98] cursor-pointer`}
+                >
+                  <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${platform.badgeBg}`}>
+                    <PlatformIcon className={`w-5 h-5 ${platform.color}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-white truncate group-hover:text-violet-200 transition-colors">
+                      {link.title || 'Untitled'}
+                    </p>
+                    {link.url && (
+                      <p className="text-[11px] text-slate-500 truncate mt-0.5 font-mono">
+                        {link.url}
+                      </p>
+                    )}
+                  </div>
+                  <ExternalLink className="w-4 h-4 text-slate-600 group-hover:text-violet-400 transition-colors shrink-0" />
+                </a>
+              );
+            })}
+          </div>
+
         </div>
       </div>
     );
   }
 
-  // Error State (e.g. Firebase rules or network error)
+  // ─── Empty State (no links, no targetUrl) ──────────────────────────────────
+  if (status === 'empty') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-slate-950 text-slate-100 relative overflow-hidden">
+        {/* Subtle glow */}
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-violet-600/8 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 text-center max-w-xs">
+          {/* Icon */}
+          <div className="w-16 h-16 rounded-2xl bg-slate-900/80 border border-slate-800 mx-auto mb-5 flex items-center justify-center">
+            <Link2 className="w-7 h-7 text-slate-600" />
+          </div>
+
+          <p className="text-sm text-slate-400 mb-1 font-medium">Belum ada link</p>
+          <p className="text-xs text-slate-600 mb-6">
+            QR Code <span className="font-mono text-slate-400">{id}</span> belum memiliki link tree.
+          </p>
+
+          <button
+            onClick={navigateToEditor}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-sm transition-all shadow-lg shadow-violet-600/25 cursor-pointer active:scale-95"
+          >
+            <Pencil className="w-4 h-4" />
+            <span>Edit Link Tree</span>
+          </button>
+        </div>
+
+      </div>
+    );
+  }
+
+  // ─── Error State ────────────────────────────────────────────────────────────
   if (status === 'error') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-slate-950 text-slate-100">
-        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center shadow-2xl">
-          <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 mx-auto mb-4 flex items-center justify-center">
-            <ShieldAlert className="w-7 h-7" />
+        <div className="max-w-sm w-full bg-slate-900/90 border border-slate-800 rounded-2xl p-6 text-center shadow-xl">
+          <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 mx-auto mb-4 flex items-center justify-center">
+            <ShieldAlert className="w-6 h-6" />
           </div>
 
-          <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-slate-800 text-amber-300 border border-slate-700">
-            ID: {id}
-          </span>
-
-          <h1 className="text-xl font-bold text-white mt-3 mb-2">Kendala Akses Firestore</h1>
-          <p className="text-xs text-slate-300 mb-5 leading-relaxed">
-            Tidak dapat membaca data QR dari Firestore. Hal ini biasanya terjadi jika aturan (Rules) Firestore pada project Anda belum diizinkan atau koneksi terputus.
+          <h1 className="text-base font-bold text-white mb-1.5">Gagal Memuat</h1>
+          <p className="text-xs text-slate-400 mb-5 leading-relaxed">
+            Tidak dapat membaca data dari Firestore. Periksa koneksi internet atau coba muat ulang.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex gap-2">
             <button
               onClick={() => window.location.reload()}
               className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors cursor-pointer"
             >
-              <span>Muat Ulang</span>
+              Muat Ulang
             </button>
             {onGoHome && (
               <button
                 onClick={onGoHome}
                 className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition-colors cursor-pointer border border-slate-700"
               >
-                <span>Ke Dashboard</span>
+                Dashboard
               </button>
             )}
           </div>
@@ -398,51 +355,6 @@ export const RedirectHandler: React.FC<RedirectHandlerProps> = ({ id, onGoHome, 
     );
   }
 
-  // Not Found State (404)
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-slate-950 text-slate-100 relative overflow-hidden selection:bg-rose-500 selection:text-white">
-      {/* Background radial glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-rose-600/10 rounded-full blur-3xl pointer-events-none" />
-
-      <div className="max-w-md w-full bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-8 text-center shadow-2xl relative z-10">
-        {/* Top Accent Line */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-500 via-red-500 to-rose-500 rounded-t-3xl" />
-
-        {/* 404 Icon */}
-        <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 mx-auto mb-4 flex items-center justify-center shadow-lg shadow-rose-500/10">
-          <ShieldAlert className="w-8 h-8 text-rose-400" />
-        </div>
-
-        {/* 404 Badge */}
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold bg-slate-800 text-rose-400 border border-slate-700/80 mb-3">
-          <span>404 NOT FOUND</span>
-          <span className="text-slate-500">&bull;</span>
-          <span className="text-slate-300">/{id}</span>
-        </div>
-
-        <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-1 mb-2">
-          QR Code Tidak Ditemukan
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-400 mb-6 leading-relaxed">
-          Link atau kode ID <span className="font-mono text-white font-bold bg-slate-800 px-2 py-0.5 rounded border border-slate-700">/{id}</span> tidak terdaftar di dalam database sistem kami.
-        </p>
-
-        {onGoHome && (
-          <div className="pt-2 border-t border-slate-800/80">
-            <button
-              onClick={onGoHome}
-              className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-semibold text-xs sm:text-sm transition-all shadow-lg shadow-indigo-600/25 cursor-pointer"
-            >
-              <span>Ke Halaman Dashboard</span>
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="mt-6 text-center text-[11px] text-slate-600 flex items-center justify-center gap-1.5 z-10">
-        <QrCode className="w-3.5 h-3.5 text-slate-600" />
-        <span>Dynamic QR & NFC Redirect System</span>
-      </div>
-    </div>
-  );
+  // ─── 404 Not Found ──────────────────────────────────────────────────────────
+  return <NotFound id={id} onGoHome={onGoHome} />;
 };
